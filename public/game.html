@@ -31,8 +31,7 @@
 
         <div id="board-container" class="p-3 bg-blue-800 rounded-2xl inline-block shadow-2xl">
             <div id="board" class="grid grid-cols-7 gap-2 opacity-50">
-                <!-- Tabuleiro será gerado pelo JS -->
-            </div>
+                </div>
         </div>
 
         <button id="reset-button" class="mt-8 bg-yellow-500 hover:bg-yellow-600 text-blue-900 font-bold py-3 px-8 rounded-lg shadow-lg transition-transform transform hover:scale-105 duration-300 hidden">
@@ -40,7 +39,6 @@
         </button>
     </div>
 
-    <!-- Importa a biblioteca cliente do Socket.IO -->
     <script src="/socket.io/socket.io.js"></script>
     <script>
         // --- Elementos do DOM ---
@@ -94,7 +92,6 @@
                     statusElement.textContent = 'O jogo empatou!';
                     statusElement.className = 'text-2xl mb-4 h-8 text-gray-400';
                 }
-                // Adicional: mostrar botão de reiniciar
             } else {
                 const isMyTurn = gameState.currentPlayer === playerNumber;
                 const playerName = gameState.currentPlayer === 1 ? 'Vermelho' : 'Amarelo';
