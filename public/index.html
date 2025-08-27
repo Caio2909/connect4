@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ligue 4 Online</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        @keyframes drop {
+            from { transform: translateY(-200px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .piece-drop { animation: drop 0.4s ease-out; }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+        .winner { animation: pulse 1s infinite; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-lg text-center">
+        <h1 class="text-5xl md:text-6xl font-bold mb-2 text-yellow-400">Ligue 4 Online</h1>
+        <p class="text-gray-400 mb-6">Conecte-se e desafie seus amigos!</p>
+
+        <div id="status" class="text-xl md:text-2xl mb-4 h-8 transition-all duration-300">Conectando ao servidor...</div>
+        <div id="player-info" class="text-lg mb-4 h-6 text-gray-400"></div>
+
+        <div id="board-container" class="p-3 bg-blue-800 rounded-2xl inline-block shadow-2xl">
+            <div id="board" class="grid grid-cols-7 gap-2 opacity-50">
+                <!-- Tabuleiro será gerado pelo JS -->
+            </div>
+        </div>
+
+        <button id="reset-button" class="mt-8 bg-yellow-500 hover:bg-yellow-600 text-blue-900 font-bold py-3 px-8 rounded-lg shadow-lg transition-transform transform hover:scale-105 duration-300 hidden">
+            Jogar Novamente
+        </button>
+    </div>
+
+    <!-- Importa a biblioteca cliente do Socket.IO -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // --- Elementos do DOM ---
+        const boardElement = document.getElementById('board');
+        const statusElement = document.getElementById('status');
+        const playerInfoElement = document.getElementById('player-info');
+        const resetButton = document.getElementById('reset-button');
+
+        // --- Constantes e Variáveis do Cliente ---
+        const ROWS = 6;
+        const COLS = 7;
+        const PLAYER_1_COLOR = 'bg-red-500';
+        const PLAYER_2_COLOR = 'bg-yellow-400';
+
+        let socket;
+        let roomName = null;
+        let playerNumber = null;
+
+        // --- Funções de Renderização ---
+
+        function renderBoard(board) {
+            boardElement.innerHTML = '';
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'w-12 h-12 md:w-16 md:h-16 bg-gray-900 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-700 transition duration-200';
+                    cell.dataset.col = col;
+
+                    const piece = document.createElement('div');
+                    piece.className = 'w-10 h-10 md:w-14 md:h-14 rounded-full';
+
+                    if (board[row][col] === 1) {
+                        piece.classList.add(PLAYER_1_COLOR);
+                    } else if (board[row][col] === 2) {
+                        piece.classList.add(PLAYER_2_COLOR);
+                    }
+
+                    cell.appendChild(piece);
+                    boardElement.appendChild(cell);
+                }
+            }
+        }
+
+        function updateStatusUI(gameState) {
+            if (gameState.gameOver) {
+                if (gameState.winner) {
+                    const winnerName = gameState.winner === 1 ? 'Vermelho' : 'Amarelo';
+                    statusElement.textContent = `Jogador ${winnerName} venceu!`;
+                    statusElement.className = `text-2xl mb-4 h-8 font-bold ${gameState.winner === 1 ? 'text-red-500' : 'text-yellow-400'}`;
+                } else if (gameState.isDraw) {
+                    statusElement.textContent = 'O jogo empatou!';
+                    statusElement.className = 'text-2xl mb-4 h-8 text-gray-400';
+                }
+                // Adicional: mostrar botão de reiniciar
+            } else {
+                const isMyTurn = gameState.currentPlayer === playerNumber;
+                const playerName = gameState.currentPlayer === 1 ? 'Vermelho' : 'Amarelo';
+                statusElement.textContent = isMyTurn ? 'É a sua vez!' : `Vez do Jogador ${playerName}`;
+                statusElement.className = `text-2xl mb-4 h-8 ${gameState.currentPlayer === 1 ? 'text-red-500' : 'text-yellow-400'}`;
+            }
+        }
+
+        // --- Lógica de Comunicação com o Servidor ---
+
+        function connectToServer() {
+            socket = io();
+
+            socket.on('connect', () => {
+                console.log('Conectado ao servidor!', socket.id);
+            });
+
+            socket.on('waitingForPlayer', () => {
+                statusElement.textContent = 'Aguardando outro jogador...';
+                renderBoard(Array(ROWS).fill(null).map(() => Array(COLS).fill(0))); // Renderiza tabuleiro vazio
+            });
+
+            socket.on('gameStart', ({ room, players, initialState }) => {
+                roomName = room;
+                playerNumber = Object.keys(players).find(key => players[key] === socket.id);
+                playerNumber = parseInt(playerNumber);
+
+                const playerColor = playerNumber === 1 ? 'Vermelho' : 'Amarelo';
+                playerInfoElement.textContent = `Você é o Jogador ${playerNumber} (${playerColor})`;
+                boardElement.classList.remove('opacity-50');
+
+                updateGameUI(initialState);
+            });
+
+            socket.on('updateGame', (gameState) => {
+                updateGameUI(gameState);
+            });
+        }
+
+        function updateGameUI(gameState) {
+            renderBoard(gameState.board);
+            updateStatusUI(gameState);
+        }
+
+        function handleBoardClick(e) {
+            const col = e.target.closest('[data-col]')?.dataset.col;
+            if (col !== undefined && roomName) {
+                socket.emit('makeMove', { col: parseInt(col), room: roomName });
+            }
+        }
+
+        // --- Inicialização ---
+        boardElement.addEventListener('click', handleBoardClick);
+        connectToServer();
+    </script>
+</body>
+</html>
