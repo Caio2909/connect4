@@ -25,12 +25,11 @@ const gameRooms = {};
 
 const createNewGameState = () => ({
     board: Array(ROWS).fill(null).map(() => Array(COLS).fill(0)),
-    currentPlayer: 1,
+    currentPlayer: Math.random() < 0.5 ? 1 : 2,
     gameOver: false,
     winner: null,
     isDraw: false,
 });
-
 io.on('connection', (socket) => {
     console.log('Um jogador se conectou:', socket.id);
 
@@ -41,7 +40,8 @@ io.on('connection', (socket) => {
 
         gameRooms[roomName] = {
             ...createNewGameState(),
-            players: { 1: waitingPlayer.id, 2: socket.id }
+            players: { 1: waitingPlayer.id, 2: socket.id },
+            playAgain: { 1: false, 2: false }
         };
 
         io.to(roomName).emit('gameStart', {
@@ -92,11 +92,38 @@ io.on('connection', (socket) => {
             io.to(room).emit('updateGame', gameState);
         }
     });
+    socket.on('playAgain', ({ room }) => {
+        const gameState = gameRooms[room];
+        if (!gameState) return;
+
+        const playerNumber = Object.keys(gameState.players).find(key => gameState.players[key] === socket.id);
+        gameState.playAgain[playerNumber] = true;
+
+        if (Object.values(gameState.playAgain).every(v => v)) {
+            const newGameState = {
+                ...createNewGameState(),
+                players: gameState.players,
+                playAgain: { 1: false, 2: false }
+            };
+            gameRooms[room] = newGameState;
+            io.to(room).emit('restartGame', newGameState);
+        }
+    });
 
     socket.on('disconnect', () => {
         console.log('Um jogador se desconectou:', socket.id);
         if (waitingPlayer && waitingPlayer.id === socket.id) {
             waitingPlayer = null;
+        }
+
+        for (const room in gameRooms) {
+            const gameState = gameRooms[room];
+            const playerNumber = Object.keys(gameState.players).find(key => gameState.players[key] === socket.id);
+            if (playerNumber) {
+                socket.to(room).emit('playerLeft');
+                delete gameRooms[room];
+                break;
+            }
         }
     });
 });

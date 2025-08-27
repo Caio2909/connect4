@@ -38,6 +38,16 @@
             Jogar Novamente
         </button>
     </div>
+    <div id="game-over-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-gray-800 p-8 rounded-lg text-center">
+            <h2 id="game-over-message" class="text-3xl font-bold mb-6"></h2>
+            <div class="flex justify-center gap-4">
+                <button id="play-again-button" class="bg-yellow-500 hover:bg-yellow-600 text-blue-900 font-bold py-3 px-8 rounded-lg">Jogar Novamente</button>
+                <button id="exit-button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-lg">Sair</button>
+            </div>
+            <p id="waiting-opponent-message" class="text-gray-400 mt-4 hidden">Aguardando o oponente...</p>
+        </div>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
@@ -46,6 +56,11 @@
         const statusElement = document.getElementById('status');
         const playerInfoElement = document.getElementById('player-info');
         const resetButton = document.getElementById('reset-button');
+        const gameOverModal = document.getElementById('game-over-modal');
+        const gameOverMessage = document.getElementById('game-over-message');
+        const playAgainButton = document.getElementById('play-again-button');
+        const exitButton = document.getElementById('exit-button');
+        const waitingOpponentMessage = document.getElementById('waiting-opponent-message');
 
         // --- Constantes e Variáveis do Cliente ---
         const ROWS = 6;
@@ -87,11 +102,14 @@
                 if (gameState.winner) {
                     const winnerName = gameState.winner === 1 ? 'Vermelho' : 'Amarelo';
                     statusElement.textContent = `Jogador ${winnerName} venceu!`;
+                    gameOverMessage.textContent = `Jogador ${winnerName} venceu!`;
                     statusElement.className = `text-2xl mb-4 h-8 font-bold ${gameState.winner === 1 ? 'text-red-500' : 'text-yellow-400'}`;
                 } else if (gameState.isDraw) {
                     statusElement.textContent = 'O jogo empatou!';
+                    gameOverMessage.textContent = 'O jogo empatou!';
                     statusElement.className = 'text-2xl mb-4 h-8 text-gray-400';
                 }
+                gameOverModal.classList.remove('hidden');
             } else {
                 const isMyTurn = gameState.currentPlayer === playerNumber;
                 const playerName = gameState.currentPlayer === 1 ? 'Vermelho' : 'Amarelo';
@@ -129,6 +147,16 @@
             socket.on('updateGame', (gameState) => {
                 updateGameUI(gameState);
             });
+            socket.on('restartGame', (initialState) => {
+                gameOverModal.classList.add('hidden');
+                waitingOpponentMessage.classList.add('hidden');
+                playAgainButton.disabled = false;
+                updateGameUI(initialState);
+            });
+            socket.on('playerLeft', () => {
+                alert('Seu oponente saiu da partida.');
+                window.location.href = '/';
+            });
         }
 
         function updateGameUI(gameState) {
@@ -145,6 +173,15 @@
 
         // --- Inicialização ---
         boardElement.addEventListener('click', handleBoardClick);
+        playAgainButton.addEventListener('click', () => {
+            playAgainButton.disabled = true;
+            waitingOpponentMessage.classList.remove('hidden');
+            socket.emit('playAgain', { room: roomName });
+        });
+        exitButton.addEventListener('click', () => {
+            window.location.href = '/';
+        });
+
         connectToServer();
     </script>
 </body>
