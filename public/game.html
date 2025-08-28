@@ -17,7 +17,10 @@
             0%, 100% { transform: scale(1); }
             50% { transform: scale(1.15); }
         }
-        .winner { animation: pulse 1s infinite; }
+        .winner-piece {
+            animation: pulse 1s infinite;
+            box-shadow: 0 0 15px 5px rgba(255, 255, 0, 0.7); /* Adiciona um brilho */
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
@@ -25,8 +28,15 @@
     <div class="w-full max-w-lg text-center">
         <h1 class="text-5xl md:text-6xl font-bold mb-2 text-yellow-400">Ligue 4 Online</h1>
         <p class="text-gray-400 mb-6">Conecte-se e desafie seus amigos!</p>
-
         <div id="status" class="text-xl md:text-2xl mb-4 h-8 transition-all duration-300">Conectando ao servidor...</div>
+        <div id="game-over-controls" class="mt-8 hidden">
+            <p id="game-over-message" class="text-2xl font-bold mb-4"></p>
+            <div class="flex justify-center gap-4 mb-4">
+                <button id="play-again-button" class="bg-yellow-500  hover:bg-yellow-600 text-blue-900 font-bold py-3 px-8 rounded-lg">Jogar Novamente</button>
+                <button id="exit-button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-lg">Sair</button>
+            </div>
+            <p id="waiting-opponent-message" class="text-gray-400 mt-4 hidden">Aguardando o oponente...</p>
+        </div>
         <div id="player-info" class="text-lg mb-4 h-6 text-gray-400"></div>
 
         <div id="board-container" class="p-3 bg-blue-800 rounded-2xl inline-block shadow-2xl">
@@ -34,19 +44,7 @@
                 </div>
         </div>
 
-        <button id="reset-button" class="mt-8 bg-yellow-500 hover:bg-yellow-600 text-blue-900 font-bold py-3 px-8 rounded-lg shadow-lg transition-transform transform hover:scale-105 duration-300 hidden">
-            Jogar Novamente
-        </button>
-    </div>
-    <div id="game-over-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
-        <div class="bg-gray-800 p-8 rounded-lg text-center">
-            <h2 id="game-over-message" class="text-3xl font-bold mb-6"></h2>
-            <div class="flex justify-center gap-4">
-                <button id="play-again-button" class="bg-yellow-500 hover:bg-yellow-600 text-blue-900 font-bold py-3 px-8 rounded-lg">Jogar Novamente</button>
-                <button id="exit-button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-lg">Sair</button>
-            </div>
-            <p id="waiting-opponent-message" class="text-gray-400 mt-4 hidden">Aguardando o oponente...</p>
-        </div>
+
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -55,8 +53,7 @@
         const boardElement = document.getElementById('board');
         const statusElement = document.getElementById('status');
         const playerInfoElement = document.getElementById('player-info');
-        const resetButton = document.getElementById('reset-button');
-        const gameOverModal = document.getElementById('game-over-modal');
+        const gameOverControls = document.getElementById('game-over-controls');
         const gameOverMessage = document.getElementById('game-over-message');
         const playAgainButton = document.getElementById('play-again-button');
         const exitButton = document.getElementById('exit-button');
@@ -74,7 +71,7 @@
 
         // --- Funções de Renderização ---
 
-        function renderBoard(board) {
+        function renderBoard(gameState) {
             boardElement.innerHTML = '';
             for (let row = 0; row < ROWS; row++) {
                 for (let col = 0; col < COLS; col++) {
@@ -85,10 +82,15 @@
                     const piece = document.createElement('div');
                     piece.className = 'w-10 h-10 md:w-14 md:h-14 rounded-full';
 
-                    if (board[row][col] === 1) {
+                    if (gameState.board[row][col] === 1) {
                         piece.classList.add(PLAYER_1_COLOR);
-                    } else if (board[row][col] === 2) {
+                    } else if (gameState.board[row][col] === 2) {
                         piece.classList.add(PLAYER_2_COLOR);
+                    }
+
+                    // Adiciona destaque às peças vencedoras
+                    if (gameState.winningLine && gameState.winningLine.some(p => p.row === row && p.col === col)) {
+                        piece.classList.add('winner-piece');
                     }
 
                     cell.appendChild(piece);
@@ -102,14 +104,14 @@
                 if (gameState.winner) {
                     const winnerName = gameState.winner === 1 ? 'Vermelho' : 'Amarelo';
                     statusElement.textContent = `Jogador ${winnerName} venceu!`;
-                    gameOverMessage.textContent = `Jogador ${winnerName} venceu!`;
+                   // gameOverMessage.textContent = `Jogador ${winnerName} venceu!`;
                     statusElement.className = `text-2xl mb-4 h-8 font-bold ${gameState.winner === 1 ? 'text-red-500' : 'text-yellow-400'}`;
                 } else if (gameState.isDraw) {
                     statusElement.textContent = 'O jogo empatou!';
                     gameOverMessage.textContent = 'O jogo empatou!';
                     statusElement.className = 'text-2xl mb-4 h-8 text-gray-400';
                 }
-                gameOverModal.classList.remove('hidden');
+                gameOverControls.classList.remove('hidden');
             } else {
                 const isMyTurn = gameState.currentPlayer === playerNumber;
                 const playerName = gameState.currentPlayer === 1 ? 'Vermelho' : 'Amarelo';
@@ -129,7 +131,8 @@
 
             socket.on('waitingForPlayer', () => {
                 statusElement.textContent = 'Aguardando outro jogador...';
-                renderBoard(Array(ROWS).fill(null).map(() => Array(COLS).fill(0))); // Renderiza tabuleiro vazio
+                // Renderiza tabuleiro vazio
+                renderBoard({ board: Array(ROWS).fill(null).map(() => Array(COLS).fill(0)), gameOver: false });
             });
 
             socket.on('gameStart', ({ room, players, initialState }) => {
@@ -148,7 +151,7 @@
                 updateGameUI(gameState);
             });
             socket.on('restartGame', (initialState) => {
-                gameOverModal.classList.add('hidden');
+                gameOverControls.classList.add('hidden');
                 waitingOpponentMessage.classList.add('hidden');
                 playAgainButton.disabled = false;
                 updateGameUI(initialState);
@@ -160,7 +163,7 @@
         }
 
         function updateGameUI(gameState) {
-            renderBoard(gameState.board);
+            renderBoard(gameState);
             updateStatusUI(gameState);
         }
 
