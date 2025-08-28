@@ -3,7 +3,7 @@ name: Deploy to VM
 on:
   push:
     branches:
-      - main # Ou a branch que você usa como principal
+      - master 
 
 jobs:
   deploy:
